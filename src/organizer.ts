@@ -1,12 +1,15 @@
 import { App, TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
 import { DateHit, isYearFolderName, parseLeadingDate } from "./dates";
 import { isInside, isManagedLocation, relativeTo } from "./paths";
-import type { CompletedOrganizerSettings } from "./settings";
+import { DEFAULT_UNDATED_FOLDER, type CompletedOrganizerSettings } from "./settings";
+
+/** Why something was filed where it was. */
+export type MoveReason = DateHit["source"] | "no date";
 
 export interface MoveRecord {
 	from: string;
 	to: string;
-	source: DateHit["source"];
+	source: MoveReason;
 	kind: "note" | "folder";
 }
 
@@ -42,6 +45,36 @@ export class Organizer {
 
 	private get root(): string {
 		return normalizePath(this.settings.sourceFolder);
+	}
+
+	/** Sanitized, since it's free text and has to be a single folder name. */
+	private get undatedFolder(): string {
+		const name = (this.settings.undatedFolderName ?? "").trim().replace(/[\\/]/g, "");
+		return name || DEFAULT_UNDATED_FOLDER;
+	}
+
+	/**
+	 * Folders the plugin files *into*: the year folders and the undated folder.
+	 * They're never moved themselves, and they are walked so that something whose
+	 * date has since changed gets re-filed.
+	 */
+	private isDestinationName(name: string): boolean {
+		if (isYearFolderName(name)) return true;
+		return name.toLowerCase() === this.undatedFolder.toLowerCase();
+	}
+
+	/**
+	 * Path of the destination folder for a bucket name. If a folder differing only
+	 * in case is already there, that one is used — creating `Undated` next to an
+	 * existing `undated` would collide on a case-insensitive disk, and would look
+	 * like two folders on any other.
+	 */
+	private resolveBucketFolder(bucket: string): string {
+		const root = this.getSourceFolder();
+		const match = root?.children.find(
+			(child) => child instanceof TFolder && child.name.toLowerCase() === bucket.toLowerCase()
+		);
+		return match ? match.path : `${this.root}/${bucket}`;
 	}
 
 	/** The configured folder, or null if it doesn't exist yet. */
@@ -87,13 +120,21 @@ export class Organizer {
 		if (!this.isCandidate(item)) return;
 
 		const hit = this.findDate(item);
-		if (!hit) {
+		let bucket: string;
+		let source: MoveReason;
+		if (hit) {
+			bucket = hit.year;
+			source = hit.source;
+		} else if (this.settings.fileUndated) {
+			bucket = this.undatedFolder;
+			source = "no date";
+		} else {
 			report.skippedNoDate.push(item.path);
 			return;
 		}
 
 		const kind = item instanceof TFolder ? "folder" : "note";
-		const targetFolder = `${this.root}/${hit.year}`;
+		const targetFolder = this.resolveBucketFolder(bucket);
 		if (item.parent?.path === targetFolder) {
 			report.alreadyFiled++;
 			return;
@@ -112,7 +153,7 @@ export class Organizer {
 		}
 
 		if (this.settings.dryRun) {
-			report.moved.push({ from: item.path, to: targetPath, source: hit.source, kind });
+			report.moved.push({ from: item.path, to: targetPath, source, kind });
 			return;
 		}
 
@@ -124,7 +165,7 @@ export class Organizer {
 			// renameFile (not vault.rename) so links follow. It takes folders too,
 			// and moves everything inside them along with it.
 			await this.app.fileManager.renameFile(item, targetPath);
-			report.moved.push({ from, to: targetPath, source: hit.source, kind });
+			report.moved.push({ from, to: targetPath, source, kind });
 		} catch (error) {
 			report.errors.push({
 				path: item.path,
@@ -175,11 +216,16 @@ export class Organizer {
 		return null;
 	}
 
-	/** A folder whose name carries a date, and which isn't a year folder itself. */
-	private isDatedFolder(folder: TFolder): boolean {
+	/**
+	 * A folder that will be moved in one piece, so the plugin must not go
+	 * rummaging inside it: a dated one, or — when undated things are collected —
+	 * any folder that isn't a destination.
+	 */
+	private movesAsUnit(folder: TFolder): boolean {
 		if (!this.settings.organizeFolders) return false;
-		if (isYearFolderName(folder.name)) return false;
-		return parseLeadingDate(folder.name) !== null;
+		if (this.isDestinationName(folder.name)) return false;
+		if (parseLeadingDate(folder.name) !== null) return true;
+		return this.settings.fileUndated;
 	}
 
 	private isCandidate(item: TAbstractFile): boolean {
@@ -190,30 +236,30 @@ export class Organizer {
 		if (relativeFolder === null) return false;
 
 		if (item instanceof TFolder) {
-			// Year folders are the destinations, never the cargo.
-			if (isYearFolderName(item.name)) return false;
+			// Year folders and the undated folder are destinations, never cargo.
+			if (this.isDestinationName(item.name)) return false;
 			if (!this.settings.organizeFolders) return false;
 		} else if (item instanceof TFile) {
 			if (this.settings.markdownOnly && item.extension !== "md") return false;
-			// A note inside a dated folder travels with that folder.
-			if (this.hasDatedAncestor(item)) return false;
+			// A note inside a folder that is itself being moved travels with it.
+			if (this.hasUnitAncestor(item)) return false;
 		} else {
 			return false;
 		}
 
 		return isManagedLocation(
 			relativeFolder,
-			isYearFolderName,
+			(name) => this.isDestinationName(name),
 			this.settings.recurseIntoOtherFolders
 		);
 	}
 
-	/** True when some folder between the item and the root is itself dated. */
-	private hasDatedAncestor(item: TAbstractFile): boolean {
+	/** True when some folder between the item and the root moves in one piece. */
+	private hasUnitAncestor(item: TAbstractFile): boolean {
 		const root = this.root;
 		let parent = item.parent;
 		while (parent && parent.path !== root && isInside(root, parent.path)) {
-			if (this.isDatedFolder(parent)) return true;
+			if (this.movesAsUnit(parent)) return true;
 			parent = parent.parent;
 		}
 		return false;
@@ -230,14 +276,15 @@ export class Organizer {
 
 			if (this.isCandidate(child)) {
 				items.push(child);
-				// A *dated* folder moves as a unit, so don't also go picking at its
-				// contents — that would empty it out on the way past. An undated one
-				// is only here to be reported, so carry on into it as usual.
-				if (this.isDatedFolder(child)) continue;
+				// A folder that moves in one piece must not also have its contents
+				// picked at — that would empty it out on the way past. A folder that
+				// is staying put is only here to be reported, so carry on into it.
+				if (this.movesAsUnit(child)) continue;
 			}
 
 			const descend =
-				this.settings.recurseIntoOtherFolders || (isRoot && isYearFolderName(child.name));
+				this.settings.recurseIntoOtherFolders ||
+				(isRoot && this.isDestinationName(child.name));
 			if (descend) items.push(...this.collectCandidates(child, false));
 		}
 		return items;

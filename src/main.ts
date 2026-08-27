@@ -13,11 +13,18 @@ const AUTO_ORGANIZE_DELAY_MS = 750;
 export default class CompletedOrganizerPlugin extends Plugin {
 	settings: CompletedOrganizerSettings = DEFAULT_SETTINGS;
 	private organizer!: Organizer;
+	/**
+	 * The create/rename watcher never files undated items: a note is undated the
+	 * moment it's created, and sweeping it into the undated folder mid-keystroke
+	 * would fight the user. Sweeps pick those up instead.
+	 */
+	private autoOrganizer!: Organizer;
 	private pending = new Map<string, number>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.organizer = new Organizer(this.app, () => this.settings);
+		this.autoOrganizer = this.organizerWith({ fileUndated: false });
 
 		this.addSettingTab(new CompletedOrganizerSettingTab(this.app, this));
 
@@ -172,7 +179,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 			if (!current) return;
 
 			const report = emptyReport(this.settings.dryRun);
-			void this.organizer.organizeItem(current, report).then(() => {
+			void this.autoOrganizer.organizeItem(current, report).then(() => {
 				if (report.moved.length) {
 					const move = report.moved[0];
 					console.log(`[completed-organizer] ${move.from} -> ${move.to} (${move.source})`);

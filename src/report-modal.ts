@@ -29,7 +29,10 @@ export class ReportModal extends Modal {
 		}
 
 		this.section("Left alone (no yyyy-mm-dd found)", this.report.skippedNoDate);
-		this.section("Left alone (a note of that name already exists)", this.report.skippedConflict);
+		this.section(
+			"Left alone (something of that name is already there)",
+			this.report.skippedConflict
+		);
 
 		if (this.report.errors.length) {
 			contentEl.createEl("h3", { text: "Errors" });

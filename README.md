@@ -12,7 +12,9 @@ An Obsidian plugin that keeps a folder of finished notes — `06 - Completed` by
 │   └── 2024-05-02 -- Berlin trip/    ← dated folders get filed too
 │       ├── notes.md
 │       └── photos/
-└── Some note with no date.md         ← left exactly where it is
+└── Undated/                          ← everything with no date lands here
+    ├── Some note with no date.md
+    └── Reference/
 ```
 
 ## How a note gets a year
@@ -23,9 +25,24 @@ The plugin looks for a `yyyy-mm-dd` at the *start* of, in order:
 2. the **front matter** — a `title` key, then `date`, `created`, `completed`, `completed-on`, `day` (configurable)
 3. the **title** — the first `# ` heading in the note
 
-The date has to lead the string, and it has to be a real calendar date, so `2024-02-31 -- ...` and `Notes from 2024-03-01` are both ignored. **If no date is found, the note is left alone.** Nothing gets guessed at, renamed, or edited — the plugin only ever moves files.
+The date has to lead the string, and it has to be a real calendar date, so `2024-02-31 -- ...` and `Notes from 2024-03-01` are both ignored. Nothing gets guessed at, renamed, or edited — the plugin only ever moves things.
 
 Moves go through Obsidian's own file manager, so links and backlinks to the note follow it.
+
+## Undated things
+
+Anything with no date — note or folder — goes into `06 - Completed/Undated/`, a sibling of the year folders. Rename it later, or give it a date in front matter, and the next sweep moves it out to the right year.
+
+Two consequences worth knowing:
+
+- An undated note sitting in `2024/` is collected into `Undated/` too. Being in a year folder is not by itself evidence of a date.
+- Undated *folders* move whole, contents and all, exactly like dated ones.
+
+Turn off **Collect undated items** to go back to leaving undated things exactly where they are.
+
+The undated folder is a destination, like the year folders: it's never moved itself, and its contents are re-checked on every sweep. A folder that differs only in case (`undated` vs `Undated`) is treated as the same folder rather than a second one.
+
+Automatic organizing on create/rename deliberately does **not** collect undated items — a new note has no date the moment you make it, and filing it away mid-keystroke would fight you. Sweeps pick them up.
 
 ## Folders
 
@@ -44,7 +61,7 @@ By default the plugin considers:
 - notes and dated folders sitting loose in `06 - Completed`
 - notes and dated folders already inside a year folder like `06 - Completed/2024` — so a 2023 note or folder that ended up in `2024/` gets corrected
 
-The *contents* of any other subfolder you made by hand (`06 - Completed/Reference`, say) are left alone, unless you turn on **Descend into non-year subfolders** in settings.
+With **Collect undated items** on, every other subfolder gets filed too — a dated one into its year, an undated one into `Undated/` — always whole, so **Descend into non-year subfolders** has nothing left to descend into. Turn collecting off and that setting matters again: an undated folder like `06 - Completed/Reference` then stays put, and the setting decides whether the plugin reaches inside it.
 
 Missing year folders are created as needed.
 
@@ -66,6 +83,8 @@ By default it also files notes automatically as you create or rename them inside
 | File name / Front matter / Title | all on | Which sources to read a date from |
 | Front matter keys | `date, created, completed, completed-on, day` | Checked in order |
 | Organize folders too | on | File dated subfolders, whole |
+| Collect undated items | on | Sweep dateless notes and folders into one folder |
+| Undated folder name | `Undated` | A sibling of the year folders |
 | Organize automatically | on | On create and rename inside the folder |
 | Organize on startup | off | One sweep after the vault loads |
 | Dry run | off | Report only, never move |

@@ -3,6 +3,9 @@ import type CompletedOrganizerPlugin from "./main";
 
 export type ConflictStrategy = "rename" | "skip";
 
+/** Used when the configured name is blank or nothing but slashes. */
+export const DEFAULT_UNDATED_FOLDER = "Undated";
+
 export interface CompletedOrganizerSettings {
 	/** Vault-relative folder whose notes get filed by year. */
 	sourceFolder: string;
@@ -16,6 +19,13 @@ export interface CompletedOrganizerSettings {
 	 * and the notes inside it are left where they are.
 	 */
 	organizeFolders: boolean;
+	/**
+	 * Collect notes and folders with no date into one folder instead of leaving
+	 * them where they lie.
+	 */
+	fileUndated: boolean;
+	/** Name of that folder, a sibling of the year folders. */
+	undatedFolderName: string;
 	/** File the note again whenever it is created or renamed in the folder. */
 	organizeOnChange: boolean;
 	/** Run at startup, once the vault has finished loading. */
@@ -40,6 +50,8 @@ export const DEFAULT_SETTINGS: CompletedOrganizerSettings = {
 	useFrontmatter: true,
 	useTitle: true,
 	organizeFolders: true,
+	fileUndated: true,
+	undatedFolderName: DEFAULT_UNDATED_FOLDER,
 	organizeOnChange: true,
 	organizeOnStartup: false,
 	recurseIntoOtherFolders: false,
@@ -136,6 +148,31 @@ export class CompletedOrganizerSettingTab extends PluginSettingTab {
 				})
 			);
 
+		new Setting(containerEl)
+			.setName("Collect undated items")
+			.setDesc(
+				"Move notes and folders with no date into a single folder instead of leaving them where they are. Sweeps only — creating an untitled note won't file it away while you're still writing it."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.fileUndated).onChange(async (value) => {
+					this.plugin.settings.fileUndated = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Undated folder name")
+			.setDesc(`A sibling of the year folders. Defaults to ${DEFAULT_UNDATED_FOLDER}.`)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_UNDATED_FOLDER)
+					.setValue(this.plugin.settings.undatedFolderName)
+					.onChange(async (value) => {
+						this.plugin.settings.undatedFolderName = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		new Setting(containerEl).setName("Behavior").setHeading();
 
 		new Setting(containerEl)
@@ -194,7 +231,7 @@ export class CompletedOrganizerSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Descend into non-year subfolders")
 			.setDesc(
-				"Off: only loose notes and notes already in a year folder are considered. On: every subfolder is flattened into year folders."
+				"Only matters when undated items are not being collected, since otherwise every subfolder is filed whole. Off: only loose notes and notes already in a destination folder are considered. On: the plugin also reaches inside folders that are staying put."
 			)
 			.addToggle((toggle) =>
 				toggle
