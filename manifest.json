@@ -1,7 +1,7 @@
 {
   "id": "completed-organizer",
   "name": "Completed Organizer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.4.0",
   "description": "Files notes in a folder into per-year subfolders based on a yyyy-mm-dd date found in the file name, front matter, or title.",
   "author": "Josh Long",
