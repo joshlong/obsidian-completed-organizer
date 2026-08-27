@@ -23,7 +23,8 @@ export class ReportModal extends Modal {
 			});
 			const list = contentEl.createEl("ul");
 			for (const move of this.report.moved) {
-				list.createEl("li", { text: `${move.from} → ${move.to}  (${move.source})` });
+				const label = move.kind === "folder" ? "folder, " : "";
+				list.createEl("li", { text: `${move.from} → ${move.to}  (${label}${move.source})` });
 			}
 		}
 

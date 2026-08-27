@@ -8,8 +8,11 @@ An Obsidian plugin that keeps a folder of finished notes — `06 - Completed` by
 │   └── 2023-11-02 -- Wrote the thing.md
 ├── 2024/
 │   ├── 2024-03-01 -- Ship it.md
-│   └── 2024-08-19 -- Conference talk.md
-└── Some note with no date.md        ← left exactly where it is
+│   ├── 2024-08-19 -- Conference talk.md
+│   └── 2024-05-02 -- Berlin trip/    ← dated folders get filed too
+│       ├── notes.md
+│       └── photos/
+└── Some note with no date.md         ← left exactly where it is
 ```
 
 ## How a note gets a year
@@ -24,14 +27,24 @@ The date has to lead the string, and it has to be a real calendar date, so `2024
 
 Moves go through Obsidian's own file manager, so links and backlinks to the note follow it.
 
+## Folders
+
+Subfolders are filed by the same rule, from the folder name — a folder has no front matter or heading to fall back on. `06 - Completed/2024-05-02 -- Berlin trip/` moves to `06 - Completed/2024/2024-05-02 -- Berlin trip/`.
+
+A dated folder moves **whole**. The plugin does not look inside it, so a `2019-01-01 -- old receipt.md` sitting in a `2024-05-02 -- Berlin trip` folder stays in that folder rather than being pulled out to `2019/` — the folder groups those notes on purpose. That holds even with **Descend into non-year subfolders** turned on.
+
+Year folders like `2024/` are the destinations and are never moved. An existing folder of the same name in the year folder is never merged into; the incoming one gets a numbered sibling (or is skipped, per the conflict setting).
+
+Turn this off with **Organize folders too** if you only want loose notes filed.
+
 ## What it touches
 
 By default the plugin considers:
 
-- notes sitting loose in `06 - Completed`
-- notes already inside a year folder like `06 - Completed/2024` — so a 2023 note that ended up in `2024/` gets corrected
+- notes and dated folders sitting loose in `06 - Completed`
+- notes and dated folders already inside a year folder like `06 - Completed/2024` — so a 2023 note or folder that ended up in `2024/` gets corrected
 
-Any other subfolder you made by hand (`06 - Completed/Reference`, say) is skipped, unless you turn on **Descend into non-year subfolders** in settings.
+The *contents* of any other subfolder you made by hand (`06 - Completed/Reference`, say) are left alone, unless you turn on **Descend into non-year subfolders** in settings.
 
 Missing year folders are created as needed.
 
@@ -52,6 +65,7 @@ By default it also files notes automatically as you create or rename them inside
 | Folder to organize | `06 - Completed` | Vault-relative path |
 | File name / Front matter / Title | all on | Which sources to read a date from |
 | Front matter keys | `date, created, completed, completed-on, day` | Checked in order |
+| Organize folders too | on | File dated subfolders, whole |
 | Organize automatically | on | On create and rename inside the folder |
 | Organize on startup | off | One sweep after the vault loads |
 | Dry run | off | Report only, never move |

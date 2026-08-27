@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "test": "tsc -noEmit -skipLibCheck && node --test \"tests/**/*.test.ts\"",
+    "test": "tsc -noEmit -skipLibCheck && node tests/build.mjs && node --test \"tests/*.test.ts\" \"tests/build/*.test.mjs\"",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "install-plugin": "node bin/install.mjs",
     "release": "bin/release.sh"

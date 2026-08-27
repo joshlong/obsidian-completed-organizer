@@ -2,3 +2,4 @@ node_modules/
 .DS_Store
 data.json
 *.tgz
+tests/build/

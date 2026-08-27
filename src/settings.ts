@@ -11,6 +11,11 @@ export interface CompletedOrganizerSettings {
 	useFileName: boolean;
 	useFrontmatter: boolean;
 	useTitle: boolean;
+	/**
+	 * Also file dated subfolders, by the same rule. A dated folder moves whole,
+	 * and the notes inside it are left where they are.
+	 */
+	organizeFolders: boolean;
 	/** File the note again whenever it is created or renamed in the folder. */
 	organizeOnChange: boolean;
 	/** Run at startup, once the vault has finished loading. */
@@ -34,6 +39,7 @@ export const DEFAULT_SETTINGS: CompletedOrganizerSettings = {
 	useFileName: true,
 	useFrontmatter: true,
 	useTitle: true,
+	organizeFolders: true,
 	organizeOnChange: true,
 	organizeOnStartup: false,
 	recurseIntoOtherFolders: false,
@@ -114,6 +120,18 @@ export class CompletedOrganizerSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.useTitle).onChange(async (value) => {
 					this.plugin.settings.useTitle = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Organize folders too")
+			.setDesc(
+				"File subfolders whose name starts with a date, e.g. 2024-03-01 -- Trip. The folder moves whole and its contents stay inside it. Year folders are never moved."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.organizeFolders).onChange(async (value) => {
+					this.plugin.settings.organizeFolders = value;
 					await this.plugin.saveSettings();
 				})
 			);

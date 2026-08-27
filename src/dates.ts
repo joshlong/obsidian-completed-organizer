@@ -15,7 +15,7 @@ export interface ParsedDate {
 }
 
 /** Where a date came from, for logging. */
-export type DateSource = "file name" | "front matter" | "title";
+export type DateSource = "file name" | "front matter" | "title" | "folder name";
 
 export interface DateHit extends ParsedDate {
 	source: DateSource;

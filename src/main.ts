@@ -108,9 +108,9 @@ export default class CompletedOrganizerPlugin extends Plugin {
 		this.reportResults(report, titlePrefix, quiet);
 	}
 
-	private async organizeSingle(file: TFile): Promise<void> {
+	private async organizeSingle(file: TAbstractFile): Promise<void> {
 		const report = emptyReport(this.settings.dryRun);
-		await this.organizer.organizeFile(file, report);
+		await this.organizer.organizeItem(file, report);
 
 		if (report.moved.length) {
 			const move = report.moved[0];
@@ -122,7 +122,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 		} else if (report.skippedNoDate.length) {
 			new Notice("No yyyy-mm-dd found in the file name, front matter, or title.");
 		} else if (report.skippedConflict.length) {
-			new Notice("A note with that name is already in the year folder.");
+			new Notice("Something with that name is already in the year folder.");
 		} else if (report.errors.length) {
 			new Notice(`Could not move it: ${report.errors[0].message}`);
 		} else {
@@ -158,7 +158,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 	 */
 	private scheduleAuto(file: TAbstractFile): void {
 		if (!this.settings.organizeOnChange) return;
-		if (!(file instanceof TFile)) return;
+		if (!(file instanceof TFile) && !(file instanceof TFolder)) return;
 		if (!this.organizer.isInSourceFolder(file)) return;
 
 		const key = file.path;
@@ -167,12 +167,12 @@ export default class CompletedOrganizerPlugin extends Plugin {
 
 		const handle = window.setTimeout(() => {
 			this.pending.delete(key);
-			// Re-resolve: the file may have moved or vanished while we waited.
+			// Re-resolve: it may have moved or vanished while we waited.
 			const current = this.app.vault.getAbstractFileByPath(normalizePath(key));
-			if (!(current instanceof TFile)) return;
+			if (!current) return;
 
 			const report = emptyReport(this.settings.dryRun);
-			void this.organizer.organizeFile(current, report).then(() => {
+			void this.organizer.organizeItem(current, report).then(() => {
 				if (report.moved.length) {
 					const move = report.moved[0];
 					console.log(`[completed-organizer] ${move.from} -> ${move.to} (${move.source})`);
