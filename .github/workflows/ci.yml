@@ -1,0 +1,24 @@
+name: CI
+
+# Releases are cut locally with bin/release.sh, which creates the GitHub release and
+# uploads its assets itself. This workflow only checks that main builds and passes.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
