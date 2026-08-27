@@ -9,8 +9,9 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const PLUGIN_ID = 'jlog';
-const FILES = ['main.js', 'manifest.json', 'styles.css'];
+const PLUGIN_ID = 'completed-organizer';
+const REQUIRED = ['main.js', 'manifest.json'];
+const OPTIONAL = ['styles.css'];
 
 /** Obsidian keeps the list of known vaults here; the most recently opened one wins. */
 async function lastOpenedVault() {
@@ -46,7 +47,12 @@ if (!existsSync(path.join(root, 'main.js'))) {
 
 const target = path.join(vault, '.obsidian', 'plugins', PLUGIN_ID);
 await mkdir(target, { recursive: true });
-for (const file of FILES) await copyFile(path.join(root, file), path.join(target, file));
+for (const file of REQUIRED) await copyFile(path.join(root, file), path.join(target, file));
+for (const file of OPTIONAL) {
+	if (existsSync(path.join(root, file))) {
+		await copyFile(path.join(root, file), path.join(target, file));
+	}
+}
 
-console.log('installed jlog into ' + target);
+console.log(`installed ${PLUGIN_ID} into ` + target);
 console.log('enable it under Settings → Community plugins (reload Obsidian if it was already on)');

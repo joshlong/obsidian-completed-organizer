@@ -70,9 +70,24 @@ Install [BRAT](https://github.com/TfTHacker/obsidian42-brat), then **Add beta pl
 npm install
 npm run build   # type-check, then bundle to main.js
 npm run dev     # watch mode
+npm test        # type-check, then run the date-parsing tests
 ```
 
-Releases are cut by tagging: `npm version patch && git push --follow-tags`. The GitHub Action attaches `main.js` and `manifest.json` to the release, which is what BRAT downloads.
+Needs Node 22.18 or newer — the tests are TypeScript run directly by `node --test`.
+
+## Releasing
+
+BRAT reads `main.js` and `manifest.json` from a release's *assets*, so a release has to exist before BRAT can install anything. `bin/release.sh` does the whole thing locally: bump, commit, tag, push, create the release, upload the assets.
+
+```sh
+export GITHUB_TOKEN=ghp_...        # repo scope, or Contents: read and write
+bin/release.sh --dry-run           # say what it would do, change nothing
+bin/release.sh --no-bump           # release the version already in manifest.json
+bin/release.sh                     # bump the patch version and release that
+bin/release.sh --minor             # or --major, or an explicit 1.2.3
+```
+
+CI only builds and tests; it does not cut releases.
 
 ## License
 

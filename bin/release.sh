@@ -29,13 +29,18 @@
 
 set -euo pipefail
 
-ASSETS=(main.js manifest.json styles.css)
+# What a release has to carry. styles.css is optional — a plugin with no CSS of its
+# own doesn't ship one, and Obsidian is fine with that.
+REQUIRED_ASSETS=(main.js manifest.json)
+OPTIONAL_ASSETS=(styles.css)
 
 # Files carrying the version number. versions.json is handled separately because it's a
 # map of plugin version -> minimum Obsidian version, not a single field.
 VERSIONED=(manifest.json package.json)
 
-GITHUB_TOKEN=${GITHUB_TOKEN:-${GITHUB_PERSONAL_ACCESS_TOKEN}}
+# Defaulted rather than required here so that a missing token reaches the friendly
+# check further down instead of tripping `set -u`.
+GITHUB_TOKEN=${GITHUB_TOKEN:-${GITHUB_PERSONAL_ACCESS_TOKEN:-}}
 
 BUILD=1
 PRERELEASE=false
@@ -164,8 +169,17 @@ if [ "$BUILD" -eq 1 ]; then
 	npm run build
 fi
 
-for asset in "${ASSETS[@]}"; do
+ASSETS=()
+for asset in "${REQUIRED_ASSETS[@]}"; do
 	[ -f "$asset" ] || die "$asset is missing — run npm run build"
+	ASSETS+=("$asset")
+done
+for asset in "${OPTIONAL_ASSETS[@]}"; do
+	if [ -f "$asset" ]; then
+		ASSETS+=("$asset")
+	else
+		note "no $asset in this plugin — skipping it"
+	fi
 done
 
 # -------------------------------------------------------- writing the new version
@@ -199,7 +213,10 @@ with open("versions.json", "w") as f:
 PY
 }
 
-if [ "$NEW_VERSION" != "$MANIFEST_VERSION" ] || ! python3 -c 'import json,sys;sys.exit(sys.argv[1] in json.load(open("versions.json")))' "$NEW_VERSION"; then
+# Rewrite when the version moved, or when this version has no versions.json row yet —
+# which is the --no-bump case. The python exits 0 when the row is already there, so the
+# `!` turns "already recorded" into "nothing to do".
+if [ "$NEW_VERSION" != "$MANIFEST_VERSION" ] || ! python3 -c 'import json,sys;sys.exit(sys.argv[1] not in json.load(open("versions.json")))' "$NEW_VERSION"; then
 	if [ "$DRY_RUN" -eq 1 ]; then
 		note "would set the version to $NEW_VERSION in ${VERSIONED[*]} and versions.json"
 	else
