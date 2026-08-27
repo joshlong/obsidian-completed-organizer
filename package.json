@@ -1,6 +1,6 @@
 {
   "name": "completed-organizer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Organize a folder of completed notes into per-year subfolders.",
   "main": "main.js",
   "type": "module",
