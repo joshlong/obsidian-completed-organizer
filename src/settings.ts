@@ -37,6 +37,11 @@ export interface CompletedOrganizerSettings {
 	recurseIntoOtherFolders: boolean;
 	/** Only touch markdown notes; otherwise every file in the folder. */
 	markdownOnly: boolean;
+	/**
+	 * Stop the file explorer following a note the plugin moves. Only has any
+	 * effect when the explorer's own "Auto-reveal current file" button is on.
+	 */
+	keepExplorerInPlace: boolean;
 	/** Report what would move without moving anything. */
 	dryRun: boolean;
 	conflictStrategy: ConflictStrategy;
@@ -56,6 +61,7 @@ export const DEFAULT_SETTINGS: CompletedOrganizerSettings = {
 	organizeOnStartup: false,
 	recurseIntoOtherFolders: false,
 	markdownOnly: true,
+	keepExplorerInPlace: true,
 	dryRun: false,
 	conflictStrategy: "rename",
 	showRibbonIcon: true,
@@ -191,6 +197,18 @@ export class CompletedOrganizerSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.organizeOnStartup).onChange(async (value) => {
 					this.plugin.settings.organizeOnStartup = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Keep the file explorer in place")
+			.setDesc(
+				"Don't let the file explorer scroll off to the year folder when the plugin moves the note you're reading. Only matters when Auto-reveal current file is turned on in the explorer."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.keepExplorerInPlace).onChange(async (value) => {
+					this.plugin.settings.keepExplorerInPlace = value;
 					await this.plugin.saveSettings();
 				})
 			);

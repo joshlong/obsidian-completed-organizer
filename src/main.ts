@@ -1,4 +1,5 @@
 import { Menu, Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
+import { withFileExplorerHeld } from "./explorer";
 import { Organizer, OrganizeReport, emptyReport, summarize } from "./organizer";
 import { ReportModal } from "./report-modal";
 import {
@@ -20,6 +21,8 @@ export default class CompletedOrganizerPlugin extends Plugin {
 	 */
 	private autoOrganizer!: Organizer;
 	private pending = new Map<string, number>();
+	/** Timers that release the file explorer once a move has settled. */
+	private holds = new Set<number>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -112,6 +115,9 @@ export default class CompletedOrganizerPlugin extends Plugin {
 	onunload(): void {
 		for (const handle of this.pending.values()) window.clearTimeout(handle);
 		this.pending.clear();
+		// Left to run: they only hand the file explorer back to itself, and doing
+		// that late is better than not at all.
+		this.holds.clear();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -129,11 +135,20 @@ export default class CompletedOrganizerPlugin extends Plugin {
 
 	private async runSweep(
 		organizer: Organizer,
-		titlePrefix?: string,
+		title?: string,
 		quiet = false
 	): Promise<void> {
-		const report = await organizer.organizeAll();
-		this.reportResults(report, titlePrefix, quiet);
+		const report = await this.moving(() => organizer.organizeAll());
+		this.reportResults(report, title, quiet);
+	}
+
+	/**
+	 * Every move the plugin makes goes through here, so that none of them drag
+	 * the file explorer off to the year folder behind the user's back.
+	 */
+	private moving<T>(action: () => Promise<T>): Promise<T> {
+		if (!this.settings.keepExplorerInPlace) return action();
+		return withFileExplorerHeld(this.app, action, this.holds);
 	}
 
 	/**
@@ -159,9 +174,11 @@ export default class CompletedOrganizerPlugin extends Plugin {
 	/** Move items in from anywhere in the vault, straight into their year folder. */
 	private async sendToCompleted(files: TAbstractFile[]): Promise<void> {
 		const report = emptyReport(this.settings.dryRun);
-		for (const file of files) {
-			await this.organizer.sendToCompleted(file, report);
-		}
+		await this.moving(async () => {
+			for (const file of files) {
+				await this.organizer.sendToCompleted(file, report);
+			}
+		});
 
 		if (files.length === 1) {
 			this.noticeForSingle(report);
@@ -172,7 +189,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 
 	private async organizeSingle(file: TAbstractFile): Promise<void> {
 		const report = emptyReport(this.settings.dryRun);
-		await this.organizer.organizeItem(file, report);
+		await this.moving(() => this.organizer.organizeItem(file, report));
 		this.noticeForSingle(report);
 	}
 
@@ -235,7 +252,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 			if (!current) return;
 
 			const report = emptyReport(this.settings.dryRun);
-			void this.autoOrganizer.organizeItem(current, report).then(() => {
+			void this.moving(() => this.autoOrganizer.organizeItem(current, report)).then(() => {
 				if (report.moved.length) {
 					const move = report.moved[0];
 					console.log(`[completed-organizer] ${move.from} -> ${move.to} (${move.source})`);

@@ -83,6 +83,8 @@ Right-click a note or folder anywhere in the file explorer — or use the comman
 
 Because you picked the item by hand, this ignores the settings that decide what a *sweep* is willing to touch: **Markdown only**, **Organize folders too**, and **Descend into non-year subfolders** don't apply, so a PDF or an undated folder goes where you point it. What it won't do is move the completed folder itself, any folder that contains it, or the year and undated folders inside it — those are destinations.
 
+The file explorer stays where it is. Obsidian's explorer has an **Auto-reveal current file** button (the stacked-panes icon in its header) that makes the tree follow the note you're reading — so filing the open note would normally scroll you off to the year folder. The plugin holds that off for the length of its own moves, using the same flag the explorer uses to ignore itself while a rename is in flight. Turn off **Keep the file explorer in place** if you'd rather it didn't reach into Obsidian's internals; turning the explorer's own auto-reveal button off does the same job, everywhere, at the cost of it no longer following you anywhere.
+
 A note with no date lands in `Undated/` as usual, or in the root of the completed folder if **Collect undated items** is off. Nothing is renamed or edited, so if you want a note filed under a particular year, give it a `yyyy-mm-dd` first — in the file name or in front matter — and then send it.
 
 ## Settings
@@ -97,6 +99,7 @@ A note with no date lands in `Undated/` as usual, or in the root of the complete
 | Undated folder name | `Undated` | A sibling of the year folders |
 | Organize automatically | on | On create and rename inside the folder |
 | Organize on startup | off | One sweep after the vault loads |
+| Keep the file explorer in place | on | Don't let the tree follow a note the plugin moves |
 | Dry run | off | Report only, never move |
 | Name conflicts | add a numeric suffix | Or leave the note where it is |
 | Markdown only | on | Ignore attachments |
