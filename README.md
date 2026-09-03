@@ -71,9 +71,19 @@ Missing year folders are created as needed.
 - **Command: Organize completed notes into year folders** — same thing.
 - **Command: Preview which notes would move (dry run)** — shows a report and changes nothing. Run this first.
 - **Command: Organize the current note into its year folder** — just the active note.
+- **Command: Send the current note to the completed folder** — see below.
+- **Right-click anything → Send to completed folder** — files it, wherever it is in the vault.
 - **Right-click any folder → Organize by year** — treat that folder as the root for one run.
 
 By default it also files notes automatically as you create or rename them inside the folder. Turn that off under **Organize automatically** if you'd rather do it by hand.
+
+### Sending something to the completed folder
+
+Right-click a note or folder anywhere in the file explorer — or use the command on the active note — and it goes straight into `06 - Completed/<year>/`, in one move, by the same date rules as a sweep. Select several files first and the menu item files the lot.
+
+Because you picked the item by hand, this ignores the settings that decide what a *sweep* is willing to touch: **Markdown only**, **Organize folders too**, and **Descend into non-year subfolders** don't apply, so a PDF or an undated folder goes where you point it. What it won't do is move the completed folder itself, any folder that contains it, or the year and undated folders inside it — those are destinations.
+
+A note with no date lands in `Undated/` as usual, or in the root of the completed folder if **Collect undated items** is off. Nothing is renamed or edited, so if you want a note filed under a particular year, give it a `yyyy-mm-dd` first — in the file name or in front matter — and then send it.
 
 ## Settings
 

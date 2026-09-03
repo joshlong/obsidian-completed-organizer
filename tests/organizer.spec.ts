@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { App } from "obsidian";
-import { Organizer } from "../src/organizer.ts";
+import { Organizer, emptyReport } from "../src/organizer.ts";
 import { DEFAULT_SETTINGS, type CompletedOrganizerSettings } from "../src/settings.ts";
 import { FakeVault } from "./vault.ts";
 
@@ -11,7 +11,15 @@ function organize(paths: string[], overrides: Partial<CompletedOrganizerSettings
 	const vault = new FakeVault(paths);
 	const settings = { ...DEFAULT_SETTINGS, sourceFolder: ROOT, ...overrides };
 	const organizer = new Organizer(vault.app as unknown as App, () => settings);
-	return { vault, organizer, run: () => organizer.organizeAll() };
+	/** Right-click → Send to completed folder, on the item at `path`. */
+	const send = async (path: string) => {
+		const item = vault.index.get(path);
+		assert.ok(item, `no such path in the fake vault: ${path}`);
+		const report = emptyReport(settings.dryRun);
+		await organizer.sendToCompleted(item, report);
+		return report;
+	};
+	return { vault, organizer, send, run: () => organizer.organizeAll() };
 }
 
 test("files a loose dated note into its year folder", async () => {
@@ -334,6 +342,139 @@ test("a dry run reports moves without performing any", async () => {
 	assert.equal(report.moved.length, 2);
 	assert.deepEqual(vault.moves, []);
 	assert.ok(!vault.snapshot().includes(`${ROOT}/2024`), "no year folder was created");
+});
+
+test("sends a dated note from elsewhere in the vault straight to its year folder", async () => {
+	const { vault, send } = organize([`${ROOT}/`, `Inbox/2024-03-01 -- Ship it.md`]);
+	const report = await send(`Inbox/2024-03-01 -- Ship it.md`);
+
+	assert.deepEqual(vault.moves, [
+		{ from: `Inbox/2024-03-01 -- Ship it.md`, to: `${ROOT}/2024/2024-03-01 -- Ship it.md` },
+	]);
+	assert.equal(report.moved[0].source, "file name");
+});
+
+test("sending reads the date from front matter and creates the folder tree", async () => {
+	const { vault, send } = organize([`Inbox/whenever.md`]);
+	vault.setCache(`Inbox/whenever.md`, { frontmatter: { completed: "2021-12-24" } });
+	await send(`Inbox/whenever.md`);
+
+	// Neither the completed folder nor the year folder existed beforehand.
+	assert.deepEqual(vault.moves, [
+		{ from: `Inbox/whenever.md`, to: `${ROOT}/2021/whenever.md` },
+	]);
+});
+
+test("sending an undated note puts it in the undated folder", async () => {
+	const { vault, send } = organize([`${ROOT}/`, `Inbox/no date.md`]);
+	await send(`Inbox/no date.md`);
+
+	assert.deepEqual(vault.moves, [
+		{ from: `Inbox/no date.md`, to: `${ROOT}/Undated/no date.md` },
+	]);
+});
+
+test("with collecting off, an undated note is sent to the completed folder itself", async () => {
+	const { vault, send } = organize([`${ROOT}/`, `Inbox/no date.md`], { fileUndated: false });
+	const report = await send(`Inbox/no date.md`);
+
+	assert.deepEqual(vault.moves, [{ from: `Inbox/no date.md`, to: `${ROOT}/no date.md` }]);
+	assert.deepEqual(report.skippedNoDate, []);
+});
+
+test("sending ignores the markdown-only and organize-folders settings", async () => {
+	const { vault, send } = organize(
+		[`${ROOT}/`, `Inbox/2024-03-01 -- scan.pdf`, `Inbox/2023-07-04 -- Trip/`, `Inbox/2023-07-04 -- Trip/a.md`],
+		{ markdownOnly: true, organizeFolders: false }
+	);
+	await send(`Inbox/2024-03-01 -- scan.pdf`);
+	await send(`Inbox/2023-07-04 -- Trip`);
+
+	// A sweep would leave both alone; asking for them by hand files them anyway.
+	assert.deepEqual(vault.moves, [
+		{ from: `Inbox/2024-03-01 -- scan.pdf`, to: `${ROOT}/2024/2024-03-01 -- scan.pdf` },
+		{ from: `Inbox/2023-07-04 -- Trip`, to: `${ROOT}/2023/2023-07-04 -- Trip` },
+	]);
+	assert.ok(vault.snapshot().includes(`${ROOT}/2023/2023-07-04 -- Trip/a.md`));
+});
+
+test("sending an already filed note leaves it alone", async () => {
+	const { vault, send } = organize([
+		`${ROOT}/`,
+		`${ROOT}/2024/`,
+		`${ROOT}/2024/2024-03-01 -- Ship it.md`,
+	]);
+	const report = await send(`${ROOT}/2024/2024-03-01 -- Ship it.md`);
+
+	assert.deepEqual(vault.moves, []);
+	assert.equal(report.alreadyFiled, 1);
+});
+
+test("sending a misfiled note re-files it, ignoring which subfolder it sat in", async () => {
+	const { vault, send } = organize([
+		`${ROOT}/`,
+		`${ROOT}/Reference/`,
+		`${ROOT}/Reference/2020-02-02 -- buried.md`,
+	]);
+	await send(`${ROOT}/Reference/2020-02-02 -- buried.md`);
+
+	assert.deepEqual(vault.moves, [
+		{ from: `${ROOT}/Reference/2020-02-02 -- buried.md`, to: `${ROOT}/2020/2020-02-02 -- buried.md` },
+	]);
+});
+
+test("a name already taken in the year folder gets a numbered sibling when sent", async () => {
+	const { vault, send } = organize([
+		`${ROOT}/`,
+		`${ROOT}/2024/`,
+		`${ROOT}/2024/2024-03-01 -- Ship it.md`,
+		`Inbox/2024-03-01 -- Ship it.md`,
+	]);
+	await send(`Inbox/2024-03-01 -- Ship it.md`);
+
+	assert.deepEqual(vault.moves, [
+		{ from: `Inbox/2024-03-01 -- Ship it.md`, to: `${ROOT}/2024/2024-03-01 -- Ship it 1.md` },
+	]);
+});
+
+test("a dry run reports a send without performing it", async () => {
+	const { vault, send } = organize([`${ROOT}/`, `Inbox/2024-03-01 -- Ship it.md`], {
+		dryRun: true,
+	});
+	const report = await send(`Inbox/2024-03-01 -- Ship it.md`);
+
+	assert.deepEqual(vault.moves, []);
+	assert.deepEqual(report.moved.map((m) => m.to), [`${ROOT}/2024/2024-03-01 -- Ship it.md`]);
+});
+
+test("the completed folder, its ancestors and its destination folders cannot be sent", async () => {
+	const { organizer, vault } = organize([
+		`${ROOT}/`,
+		`${ROOT}/2024/`,
+		`${ROOT}/Undated/`,
+		`${ROOT}/2024-03-01 -- Trip/`,
+		`Inbox/note.md`,
+	]);
+	const can = (path: string) => organizer.canSendToCompleted(vault.index.get(path)!);
+
+	assert.equal(can(ROOT), false, "the completed folder itself");
+	assert.equal(can(`${ROOT}/2024`), false, "a year folder");
+	assert.equal(can(`${ROOT}/Undated`), false, "the undated folder");
+	assert.equal(can(`${ROOT}/2024-03-01 -- Trip`), true, "an ordinary dated folder inside it");
+	assert.equal(can(`Inbox/note.md`), true, "a note from elsewhere");
+});
+
+test("a folder containing the completed folder cannot be sent into it", async () => {
+	const nested = "Archive/06 - Completed";
+	const vault = new FakeVault([`${nested}/`, `Archive/loose.md`]);
+	const settings = { ...DEFAULT_SETTINGS, sourceFolder: nested };
+	const organizer = new Organizer(vault.app as unknown as App, () => settings);
+
+	assert.equal(organizer.canSendToCompleted(vault.index.get("Archive")!), false);
+
+	const report = emptyReport(false);
+	await organizer.sendToCompleted(vault.index.get("Archive")!, report);
+	assert.deepEqual(vault.moves, []);
 });
 
 test("reports a missing source folder instead of throwing", async () => {

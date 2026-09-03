@@ -1,4 +1,4 @@
-import { Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
+import { Menu, Notice, Plugin, TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
 import { Organizer, OrganizeReport, emptyReport, summarize } from "./organizer";
 import { ReportModal } from "./report-modal";
 import {
@@ -38,7 +38,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 			id: "preview-organize-all",
 			name: "Preview which notes would move (dry run)",
 			callback: () =>
-				void this.runSweep(this.organizerWith({ dryRun: true }), "Dry run"),
+				void this.runSweep(this.organizerWith({ dryRun: true }), "Dry run: organize by year"),
 		});
 
 		this.addCommand({
@@ -53,15 +53,29 @@ export default class CompletedOrganizerPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "send-current-file-to-completed",
+			name: "Send the current note to the completed folder",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || !this.organizer.canSendToCompleted(file)) return false;
+				if (checking) return true;
+				void this.sendToCompleted([file]);
+				return true;
+			},
+		});
+
 		if (this.settings.showRibbonIcon) {
 			this.addRibbonIcon("calendar-clock", "Organize completed notes by year", () =>
 				void this.runSweep(this.organizer)
 			);
 		}
 
-		// Right-click any folder to file that folder by year.
+		// Right-click anything to send it in; right-click a folder to file that
+		// folder by year, treating it as the root for one run.
 		this.registerEvent(
 			this.app.workspace.on("file-menu", (menu, file) => {
+				this.addSendMenuItem(menu, [file]);
 				if (!(file instanceof TFolder)) return;
 				menu.addItem((item) =>
 					item
@@ -71,6 +85,13 @@ export default class CompletedOrganizerPlugin extends Plugin {
 							void this.runSweep(this.organizerWith({ sourceFolder: file.path }))
 						)
 				);
+			})
+		);
+
+		// And the same for a multi-file selection in the file explorer.
+		this.registerEvent(
+			this.app.workspace.on("files-menu", (menu, files) => {
+				this.addSendMenuItem(menu, files);
 			})
 		);
 
@@ -115,10 +136,48 @@ export default class CompletedOrganizerPlugin extends Plugin {
 		this.reportResults(report, titlePrefix, quiet);
 	}
 
+	/**
+	 * Adds "Send to completed folder" for whatever the file explorer has selected.
+	 * Left off entirely when nothing in the selection could move.
+	 */
+	private addSendMenuItem(menu: Menu, files: TAbstractFile[]): void {
+		const movable = files.filter((file) => this.organizer.canSendToCompleted(file));
+		if (!movable.length) return;
+
+		const label =
+			movable.length === 1
+				? "Send to completed folder"
+				: `Send ${movable.length} items to completed folder`;
+		menu.addItem((item) =>
+			item
+				.setTitle(label)
+				.setIcon("archive")
+				.onClick(() => void this.sendToCompleted(movable))
+		);
+	}
+
+	/** Move items in from anywhere in the vault, straight into their year folder. */
+	private async sendToCompleted(files: TAbstractFile[]): Promise<void> {
+		const report = emptyReport(this.settings.dryRun);
+		for (const file of files) {
+			await this.organizer.sendToCompleted(file, report);
+		}
+
+		if (files.length === 1) {
+			this.noticeForSingle(report);
+		} else {
+			this.reportResults(report, "Send to completed folder");
+		}
+	}
+
 	private async organizeSingle(file: TAbstractFile): Promise<void> {
 		const report = emptyReport(this.settings.dryRun);
 		await this.organizer.organizeItem(file, report);
+		this.noticeForSingle(report);
+	}
 
+	/** One line about what happened to one item, since a modal would be overkill. */
+	private noticeForSingle(report: OrganizeReport): void {
 		if (report.moved.length) {
 			const move = report.moved[0];
 			new Notice(
@@ -137,7 +196,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 		}
 	}
 
-	private reportResults(report: OrganizeReport, titlePrefix?: string, quiet = false): void {
+	private reportResults(report: OrganizeReport, title?: string, quiet = false): void {
 		const summary = summarize(report);
 		console.log(`[completed-organizer] ${summary}`, report);
 
@@ -150,10 +209,7 @@ export default class CompletedOrganizerPlugin extends Plugin {
 			report.moved.length > 0;
 
 		if (interesting) {
-			const title = titlePrefix
-				? `${titlePrefix}: organize by year`
-				: "Organize completed notes by year";
-			new ReportModal(this.app, report, title).open();
+			new ReportModal(this.app, report, title ?? "Organize completed notes by year").open();
 		} else {
 			new Notice(`Completed Organizer: ${summary}`);
 		}

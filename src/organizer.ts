@@ -120,21 +120,66 @@ export class Organizer {
 		if (!this.isCandidate(item)) return;
 
 		const hit = this.findDate(item);
-		let bucket: string;
-		let source: MoveReason;
-		if (hit) {
-			bucket = hit.year;
-			source = hit.source;
-		} else if (this.settings.fileUndated) {
-			bucket = this.undatedFolder;
-			source = "no date";
-		} else {
+		if (!hit && !this.settings.fileUndated) {
 			report.skippedNoDate.push(item.path);
 			return;
 		}
 
+		const bucket = hit ? hit.year : this.undatedFolder;
+		await this.moveInto(item, this.resolveBucketFolder(bucket), hit?.source ?? "no date", report);
+	}
+
+	/**
+	 * File something from anywhere in the vault into the completed folder, in one
+	 * move, straight into the year folder it belongs in.
+	 *
+	 * Unlike a sweep this skips the "is this ours to touch" checks — markdown only,
+	 * organize folders, which subfolders are in scope — because the user pointed at
+	 * this item by hand. Something already under the completed folder is fine to
+	 * send too; it just gets re-filed.
+	 */
+	async sendToCompleted(item: TAbstractFile, report: OrganizeReport): Promise<void> {
+		if (!this.canSendToCompleted(item)) return;
+
+		const hit = this.findDate(item);
+		// With no date and collecting turned off there is nowhere to put it but the
+		// completed folder itself. Refusing would be worse: the user asked for this
+		// one specifically, and a sweep would leave it wherever it is now.
+		const targetFolder = hit
+			? this.resolveBucketFolder(hit.year)
+			: this.settings.fileUndated
+				? this.resolveBucketFolder(this.undatedFolder)
+				: this.root;
+
+		await this.moveInto(item, targetFolder, hit?.source ?? "no date", report);
+	}
+
+	/**
+	 * True when the send command has somewhere to put this item. The completed
+	 * folder itself, and anything containing it, can't be filed inside it, and the
+	 * year and undated folders are destinations rather than things to be filed.
+	 */
+	canSendToCompleted(item: TAbstractFile): boolean {
+		if (!(item instanceof TFile) && !(item instanceof TFolder)) return false;
+
+		const root = this.root;
+		if (!root || root === "/" || root === ".") return false;
+		if (item.path === root || isInside(item.path, root)) return false;
+
+		if (item instanceof TFolder && this.isInSourceFolder(item)) {
+			return !this.isDestinationName(item.name);
+		}
+		return true;
+	}
+
+	/** The move itself, once the destination folder has been decided. */
+	private async moveInto(
+		item: TAbstractFile,
+		targetFolder: string,
+		source: MoveReason,
+		report: OrganizeReport
+	): Promise<void> {
 		const kind = item instanceof TFolder ? "folder" : "note";
-		const targetFolder = this.resolveBucketFolder(bucket);
 		if (item.parent?.path === targetFolder) {
 			report.alreadyFiled++;
 			return;
